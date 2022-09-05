@@ -1,4 +1,5 @@
 import random
+from map import Map
 
 states = {'Susceptible': 0,
           'Exposed': 1,
@@ -9,12 +10,11 @@ states = {'Susceptible': 0,
 
 
 class Person(object):
-    def __init__(self, width, height, state='Susceptible'):
+    def __init__(self, width, height, state='Susceptible', mobility=1):
         self.state = state
         self.cnt = 0
-        self.loc = [random.randint(1, width - 1), random.randint(1, height - 1)]
-        self.age = 20
-        self.scale = [width, height]
+        self.loc = [width, height]
+        self.mobility = int(mobility / random.randint(1, mobility) + 0.01)
 
     def move(self, mymap):
         if self.state == 'Confirmed' or self.state == 'Death':
@@ -25,8 +25,8 @@ class Person(object):
         for i in seq:
             width = self.loc[0] + direct[i][0]
             height = self.loc[1] + direct[i][1]
-            if 0 < width < self.scale[0] and 0 < height < self.scale[1]:
-                if mymap[width][height]['accessible']:
+            if 0 < width < mymap.width and 0 < height < mymap.height:
+                if mymap.map[width][height]['accessible']:
                     self.loc = [width, height]
                     return
 
@@ -37,13 +37,13 @@ class Person(object):
             for item in direct:
                 width = self.loc[0] + item[0]
                 height = self.loc[1] + item[1]
-                if 0 < width < self.scale[0] and 0 < height < self.scale[1]:
-                    if mymap[width][height]['accessible']:
-                        mymap[width][height]['virus'] = epidata['virus_delay']
+                if 0 < width < mymap.width and 0 < height < mymap.height:
+                    if mymap.map[width][height]['accessible']:
+                        mymap.map[width][height]['virus'] = epidata['virus_delay']
 
     def state_upd_hour(self, mymap, epidata):
         if self.state == 'Susceptible':
-            if mymap[self.loc[0]][self.loc[1]]['virus'] > 0:
+            if mymap.map[self.loc[0]][self.loc[1]]['virus'] > 0:
                 p = random.random()
                 if p < epidata['infect_rate']:
                     self.state = 'Exposed'
@@ -73,12 +73,33 @@ class Person(object):
 
 
 if __name__ == '__main__':
-    person = Person(10, 10)
-    mymap = []
-    for i in range(1280):
-        mymap.append([])
-        for j in range(720):
-            mymap[i].append({'accessible': True, 'virus': 0})
+    epidata = {'infect_rate': 0.9,
+               # hourly/mainly determined by mask and vaccine, have no relationship with mobility/policy
+               'Teu_lower': 48,
+               'Teu_upper': 96,
+               # mean is 3.0(day)
+               'Tui_lower': 12,
+               'Tui_upper': 96,
+               # mean is 1.89(beijing tiantang bar),3.89(beijing 2022.05)(day)
+               'Tir_lower': 48,
+               'Tir_upper': 120,
+               'DR_ratio': 0.01,
+               'virus_delay': 72  # hour
+               }
+    person = Person(220, 220, state='Exposed', mobility=18)
+    mymap = Map(500, 500)
+    for i in range(200, 240):
+        for j in range(200, 240):
+            mymap.set_env(i, j, False)
+    for i in range(203, 237):
+        for j in range(203, 237):
+            mymap.set_env(i, j, True)
+    for i in range(200, 203):
+        for j in range(215, 225):
+            mymap.set_env(i, j, True)
     for i in range(48):
-        person.move(mymap)
-        print(person.loc)
+        for step in range(person.mobility):
+            person.move(mymap)
+            person.release_virus(mymap, epidata)
+        person.state_upd_hour(mymap, epidata)
+        print(person.state, person.loc)
